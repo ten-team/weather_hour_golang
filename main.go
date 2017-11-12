@@ -36,6 +36,7 @@ index 48c12f5..0dba647 100644
 */
 
 import (
+	"encoding/json"
 	"github.com/jgarff/rpi_ws281x/golang/ws2811"
 	"io/ioutil"
 	"log"
@@ -67,7 +68,27 @@ const (
 	weather_unknown      = iota
 )
 
-func getWeatherImpl(weather_url string) (body string, err error) {
+type CurrentWeatherApiResult struct {
+	Weathers []Weather `json:"weather"`
+}
+
+type Forecast5WeatherApiResult struct {
+	List []ForecastWeather `json:"list"`
+}
+
+type ForecastWeather struct {
+	Weathers []Weather `json:"weather"`
+	DtText   string    `json:"dt_txt"`
+}
+
+type Weather struct {
+	Id          int    `json:"id"`
+	Main        string `json:"main"`
+	Description string `json:"description"`
+	Icon        string `json:"icon"`
+}
+
+func getWeatherImpl(weather_url string) (body []byte, err error) {
 	values := url.Values{}
 	values.Add("APPID", APPID)
 	values.Add("lat", LAT)
@@ -76,36 +97,48 @@ func getWeatherImpl(weather_url string) (body string, err error) {
 	resp, err := http.Get(weather_url + "?" + values.Encode())
 	if err != nil {
 		log.Println(err)
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Println(err)
-		return "", err
+		return nil, err
 	}
-	return string(b), nil
+	return b, nil
 }
 
 // see https://openweathermap.org/current
-func getCurrentWeather() (weather int, err error) {
+func getCurrentWeather() (weather CurrentWeatherApiResult, err error) {
 	body, err := getWeatherImpl(CURRENT_WEATHER_URL)
 	if err != nil {
-		return weather_unknown, err
+		return CurrentWeatherApiResult{}, err
 	}
-	log.Println(body)
-	return weather_clear, nil
+	var result CurrentWeatherApiResult
+	if err := json.Unmarshal(body, &result); err != nil {
+		log.Println(err)
+		return CurrentWeatherApiResult{}, err
+	}
+	log.Printf("current weather: %s\n", result.Weathers[0].Main)
+	return result, nil
 }
 
 // see https://openweathermap.org/forecast5
-func getForecast5Weather() (weather int, err error) {
+func getForecast5Weather() (weather Forecast5WeatherApiResult, err error) {
 	body, err := getWeatherImpl(FORECAST5_WEATHER_URL)
 	if err != nil {
-		return weather_unknown, err
+		return Forecast5WeatherApiResult{}, err
 	}
-	log.Println(body)
-	return weather_clear, nil
+	var result Forecast5WeatherApiResult
+	if err := json.Unmarshal(body, &result); err != nil {
+		log.Println(err)
+		return Forecast5WeatherApiResult{}, err
+	}
+	log.Printf("weather: %s, %s\n", result.List[1].Weathers[0].Main, result.List[1].DtText)
+	log.Printf("weather: %s, %s\n", result.List[2].Weathers[0].Main, result.List[2].DtText)
+	log.Printf("weather: %s, %s\n", result.List[3].Weathers[0].Main, result.List[3].DtText)
+	return result, nil
 }
 
 func color(red uint8, green uint8, blue uint8) uint32 {
@@ -123,6 +156,7 @@ func main() {
 		log.Println(err)
 		os.Exit(1)
 	}
+	log.Printf("Booted\n")
 	getCurrentWeather()
 	getForecast5Weather()
 	for {
