@@ -49,23 +49,9 @@ import (
 const (
 	CURRENT_WEATHER_URL   = "http://api.openweathermap.org/data/2.5/weather"
 	FORECAST5_WEATHER_URL = "http://api.openweathermap.org/data/2.5/forecast"
-	APPID                 = "your appid"
-	LAT                   = "your lat"
-	LON                   = "your lon"
-)
-
-// see https://openweathermap.org/weather-conditions
-const (
-	weather_thunderstorm = iota
-	weather_drizzle      = iota
-	weather_rain         = iota
-	weather_snow         = iota
-	weather_atmosphere   = iota
-	weather_clear        = iota
-	weather_clouds       = iota
-	weather_extreme      = iota
-	weather_additional   = iota
-	weather_unknown      = iota
+	APPID                 = ""
+	LAT                   = ""
+	LON                   = ""
 )
 
 type CurrentWeatherApiResult struct {
@@ -81,6 +67,7 @@ type ForecastWeather struct {
 	DtText   string    `json:"dt_txt"`
 }
 
+// see https://openweathermap.org/weather-conditions
 type Weather struct {
 	Id          int    `json:"id"`
 	Main        string `json:"main"`
@@ -145,40 +132,102 @@ func color(red uint8, green uint8, blue uint8) uint32 {
 	return uint32(red)<<8 + uint32(green)<<16 + uint32(blue)
 }
 
+func weather2color(weather string) uint32 {
+	var (
+		clear   = color(255, 170, 0)
+		clouds  = color(170, 170, 170)
+		rain    = color(0, 65, 255)
+		snow    = color(242, 242, 255)
+		unknown = color(255, 0, 0)
+	)
+	// see http://www.jma.go.jp/jma/kishou/info/colorguide/120524_hpcolorguide.pdf
+	switch weather {
+	case "Thunderstorm":
+		return rain
+	case "Drizzle":
+		return rain
+	case "Rain":
+		return rain
+	case "Snow":
+		return snow
+	case "Atmosphere":
+		return clouds
+	case "Clear":
+		return clear
+	case "Clouds":
+		return clouds
+	case "Extreme":
+		return unknown
+	case "Additional":
+		return unknown
+	default:
+		log.Printf("unknown weather: %s\n", weather)
+		return unknown
+	}
+}
+
 func main() {
 	log.Printf("Booting...\n")
 	const (
-		GPIO_PIN           = 18
-		LED_COUNT          = 3
-		DEFAULT_BRIGHTNESS = 255
+		ERROR_LED             = iota
+		CURRENT_WEATHER_LED   = iota
+		FORECAST1_WEATHER_LED = iota
+		FORECAST2_WEATHER_LED = iota
+		FORECAST3_WEATHER_LED = iota
+
+		GPIO_PIN                    = 18
+		LED_COUNT                   = 5
+		DEFAULT_BRIGHTNESS          = 255
+		ERROR_BRIGHTNESS            = 255
+		CURRENT_WEATHER_BRIGHTNESS  = 255
+		FORECAST_WEATHER_BRIGHTNESS = 128
 	)
+	var error_color = color(0xFF, 0, 0)
+	var sleep_time = time.Second * 30
+
 	if err := ws2811.Init(GPIO_PIN, LED_COUNT, DEFAULT_BRIGHTNESS); err != nil {
 		log.Println(err)
 		os.Exit(1)
 	}
 	log.Printf("Booted\n")
-	getCurrentWeather()
-	getForecast5Weather()
+
 	for {
-		ws2811.SetLed(0, color(0, 0, 0xFF))
-		ws2811.SetBrightness(1, 255)
-		if err := ws2811.Render(); err != nil {
+		current, err := getCurrentWeather()
+		if err != nil {
 			log.Println(err)
+			ws2811.SetBrightness(ERROR_LED, ERROR_BRIGHTNESS)
+			ws2811.SetLed(ERROR_LED, error_color)
+			time.Sleep(sleep_time)
+			continue
 		}
-		time.Sleep(time.Second)
 
-		ws2811.SetLed(0, color(0, 0, 0xFF))
-		ws2811.SetBrightness(1, 128)
-		if err := ws2811.Render(); err != nil {
-			log.Println(err)
-		}
-		time.Sleep(time.Second)
+		ws2811.SetBrightness(CURRENT_WEATHER_LED, CURRENT_WEATHER_BRIGHTNESS)
+		ws2811.SetLed(CURRENT_WEATHER_LED, weather2color(current.Weathers[0].Main))
 
-		ws2811.SetLed(0, 0)
-		ws2811.SetBrightness(1, 255)
+		forecast, err := getForecast5Weather()
+		if err != nil {
+			log.Println(err)
+			ws2811.SetBrightness(ERROR_LED, ERROR_BRIGHTNESS)
+			ws2811.SetLed(ERROR_LED, error_color)
+			time.Sleep(sleep_time)
+			continue
+		}
+
+		ws2811.SetBrightness(FORECAST1_WEATHER_LED, FORECAST_WEATHER_BRIGHTNESS)
+		ws2811.SetLed(FORECAST1_WEATHER_LED, weather2color(forecast.List[1].Weathers[0].Main))
+
+		ws2811.SetBrightness(FORECAST2_WEATHER_LED, FORECAST_WEATHER_BRIGHTNESS)
+		ws2811.SetLed(FORECAST2_WEATHER_LED, weather2color(forecast.List[2].Weathers[0].Main))
+
+		ws2811.SetBrightness(FORECAST3_WEATHER_LED, FORECAST_WEATHER_BRIGHTNESS)
+		ws2811.SetLed(FORECAST3_WEATHER_LED, weather2color(forecast.List[3].Weathers[0].Main))
+
 		if err := ws2811.Render(); err != nil {
 			log.Println(err)
+			time.Sleep(sleep_time)
+			continue
 		}
-		time.Sleep(time.Second)
+
+		time.Sleep(sleep_time)
 	}
 }
