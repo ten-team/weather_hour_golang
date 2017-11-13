@@ -1,40 +1,5 @@
 package main
 
-/*
-// Modify jgarff/rpi_ws281x
-// Add SetBrightness
-diff --git a/golang/ws2811/ws2811.go b/golang/ws2811/ws2811.go
-index 483b668..613cc8a 100644
---- a/golang/ws2811/ws2811.go
-+++ b/golang/ws2811/ws2811.go
-@@ -82,6 +82,10 @@ func SetLed(index int, value uint32) {
-        C.ws2811_set_led(&C.ledstring, C.int(index), C.uint32_t(value))
- }
-
-+func SetBrightness(index int, value uint8) {
-+       C.ws2811_set_brightness(&C.ledstring, C.int(index), C.uint8_t(value))
-+}
-+
- func Clear() {
-        C.ws2811_clear(&C.ledstring)
- }
-diff --git a/golang/ws2811/ws2811.go.h b/golang/ws2811/ws2811.go.h
-index 48c12f5..0dba647 100644
---- a/golang/ws2811/ws2811.go.h
-+++ b/golang/ws2811/ws2811.go.h
-@@ -52,6 +52,10 @@ void ws2811_set_led(ws2811_t *ws2811, int index, uint32_t value) {
-        ws2811->channel[0].leds[index] = value;
- }
-
-+void ws2811_set_brightness(ws2811_t *ws2811, int index, uint8_t value) {
-+       ws2811->channel[0].brightness = value;
-+}
-+
- void ws2811_clear(ws2811_t *ws2811) {
-        for (int chan = 0; chan < RPI_PWM_CHANNELS; chan++) {
-                ws2811_channel_t *channel = &ws2811->channel[chan];
-*/
-
 import (
 	"encoding/json"
 	"github.com/jgarff/rpi_ws281x/golang/ws2811"
@@ -49,9 +14,9 @@ import (
 const (
 	CURRENT_WEATHER_URL   = "http://api.openweathermap.org/data/2.5/weather"
 	FORECAST5_WEATHER_URL = "http://api.openweathermap.org/data/2.5/forecast"
-	APPID                 = ""
-	LAT                   = ""
-	LON                   = ""
+	APPID                 = "your appid"
+	LAT                   = "your lat"
+	LON                   = "your lon"
 )
 
 type CurrentWeatherApiResult struct {
@@ -166,24 +131,47 @@ func weather2color(weather string) uint32 {
 	}
 }
 
+func weather2darkcolor(weather string) uint32 {
+	c := weather2color(weather)
+	red := uint8((c & 0x00FF00) >> 8)
+	green := uint8((c & 0xFF0000) >> 16)
+	blue := uint8(c & 0x0000FF)
+	return color(red/8, green/8, blue/8)
+}
+
+func setLeds(leds []int, color uint32) error {
+	for _, led := range leds {
+		ws2811.SetLed(led, color)
+	}
+	return nil
+}
+
+func setErrorLed() error {
+	const (
+		ERROR_LED = 0
+	)
+	var error_color = color(0xFF, 0, 0)
+	ws2811.SetLed(ERROR_LED, error_color)
+	if err := ws2811.Render(); err != nil {
+		log.Println(err)
+		return err
+	}
+	return nil
+}
+
 func main() {
 	log.Printf("Booting...\n")
 	const (
-		ERROR_LED             = iota
-		CURRENT_WEATHER_LED   = iota
-		FORECAST1_WEATHER_LED = iota
-		FORECAST2_WEATHER_LED = iota
-		FORECAST3_WEATHER_LED = iota
-
-		GPIO_PIN                    = 18
-		LED_COUNT                   = 5
-		DEFAULT_BRIGHTNESS          = 255
-		ERROR_BRIGHTNESS            = 255
-		CURRENT_WEATHER_BRIGHTNESS  = 255
-		FORECAST_WEATHER_BRIGHTNESS = 128
+		GPIO_PIN           = 18
+		LED_COUNT          = 32
+		DEFAULT_BRIGHTNESS = 255
 	)
-	var error_color = color(0xFF, 0, 0)
 	var sleep_time = time.Second * 30
+	led_matrix := [][]int{
+		{1, 2, 3, 4, 5, 6, 7},
+		{8, 9, 10, 11, 12, 13, 14, 15},
+		{16, 17, 18, 19, 20, 21, 22, 23},
+		{24, 25, 26, 27, 28, 29, 30, 31}}
 
 	if err := ws2811.Init(GPIO_PIN, LED_COUNT, DEFAULT_BRIGHTNESS); err != nil {
 		log.Println(err)
@@ -195,37 +183,26 @@ func main() {
 		current, err := getCurrentWeather()
 		if err != nil {
 			log.Println(err)
-			ws2811.SetBrightness(ERROR_LED, ERROR_BRIGHTNESS)
-			ws2811.SetLed(ERROR_LED, error_color)
+			setErrorLed()
 			time.Sleep(sleep_time)
 			continue
 		}
 
-		ws2811.SetBrightness(CURRENT_WEATHER_LED, CURRENT_WEATHER_BRIGHTNESS)
-		ws2811.SetLed(CURRENT_WEATHER_LED, weather2color(current.Weathers[0].Main))
+		setLeds(led_matrix[0], weather2color(current.Weathers[0].Main))
 
 		forecast, err := getForecast5Weather()
 		if err != nil {
 			log.Println(err)
-			ws2811.SetBrightness(ERROR_LED, ERROR_BRIGHTNESS)
-			ws2811.SetLed(ERROR_LED, error_color)
+			setErrorLed()
 			time.Sleep(sleep_time)
 			continue
 		}
 
-		ws2811.SetBrightness(FORECAST1_WEATHER_LED, FORECAST_WEATHER_BRIGHTNESS)
-		ws2811.SetLed(FORECAST1_WEATHER_LED, weather2color(forecast.List[1].Weathers[0].Main))
-
-		ws2811.SetBrightness(FORECAST2_WEATHER_LED, FORECAST_WEATHER_BRIGHTNESS)
-		ws2811.SetLed(FORECAST2_WEATHER_LED, weather2color(forecast.List[2].Weathers[0].Main))
-
-		ws2811.SetBrightness(FORECAST3_WEATHER_LED, FORECAST_WEATHER_BRIGHTNESS)
-		ws2811.SetLed(FORECAST3_WEATHER_LED, weather2color(forecast.List[3].Weathers[0].Main))
-
+		setLeds(led_matrix[1], weather2darkcolor(forecast.List[1].Weathers[0].Main))
+		setLeds(led_matrix[2], weather2darkcolor(forecast.List[2].Weathers[0].Main))
+		setLeds(led_matrix[3], weather2darkcolor(forecast.List[3].Weathers[0].Main))
 		if err := ws2811.Render(); err != nil {
 			log.Println(err)
-			time.Sleep(sleep_time)
-			continue
 		}
 
 		time.Sleep(sleep_time)
