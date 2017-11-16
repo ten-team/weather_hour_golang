@@ -146,11 +146,10 @@ func setLeds(leds []int, color uint32) error {
 	return nil
 }
 
-func setErrorLed() error {
+func setErrorLedImpl(error_color uint32) error {
 	const (
 		ERROR_LED = 0
 	)
-	var error_color = color(0xFF, 0, 0)
 	ws2811.SetLed(ERROR_LED, error_color)
 	if err := ws2811.Render(); err != nil {
 		log.Println(err)
@@ -159,19 +158,27 @@ func setErrorLed() error {
 	return nil
 }
 
+func setErrorLed() error {
+	return setErrorLedImpl(color(0xFF, 0, 0))
+}
+
+func unsetErrorLed() error {
+	return setErrorLedImpl(color(0x00, 0, 0))
+}
+
 func main() {
 	log.Printf("Booting...\n")
 	const (
 		GPIO_PIN           = 18
-		LED_COUNT          = 32
+		LED_COUNT          = 26
 		DEFAULT_BRIGHTNESS = 255
 	)
 	var sleep_time = time.Second * 30
 	led_matrix := [][]int{
 		{1, 2, 3, 4, 5, 6, 7},
-		{8, 9, 10, 11, 12, 13, 14, 15},
-		{16, 17, 18, 19, 20, 21, 22, 23},
-		{24, 25, 26, 27, 28, 29, 30, 31}}
+		{8, 9, 10, 11, 12, 13},
+		{14, 15, 16, 17, 18, 19},
+		{20, 21, 22, 23, 24, 25}}
 
 	if err := ws2811.Init(GPIO_PIN, LED_COUNT, DEFAULT_BRIGHTNESS); err != nil {
 		log.Println(err)
@@ -180,6 +187,7 @@ func main() {
 	log.Printf("Booted\n")
 
 	for {
+		unsetErrorLed()
 		current, err := getCurrentWeather()
 		if err != nil {
 			log.Println(err)
