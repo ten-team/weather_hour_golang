@@ -196,7 +196,10 @@ func main() {
 			continue
 		}
 
-		setLeds(led_matrix[0], weather2color(current.Weathers[0].Main))
+		t := time.Now()
+		hour := t.Hour() % 12
+		currentIndex := hour / 3
+		setLeds(led_matrix[currentIndex], weather2color(current.Weathers[0].Main))
 
 		forecast, err := getForecast5Weather()
 		if err != nil {
@@ -206,9 +209,9 @@ func main() {
 			continue
 		}
 
-		setLeds(led_matrix[1], weather2darkcolor(forecast.List[1].Weathers[0].Main))
-		setLeds(led_matrix[2], weather2darkcolor(forecast.List[2].Weathers[0].Main))
-		setLeds(led_matrix[3], weather2darkcolor(forecast.List[3].Weathers[0].Main))
+		setLeds(led_matrix[(currentIndex+1)%4], weather2darkcolor(forecast.List[1].Weathers[0].Main))
+		setLeds(led_matrix[(currentIndex+2)%4], weather2darkcolor(forecast.List[2].Weathers[0].Main))
+		setLeds(led_matrix[(currentIndex+3)%4], weather2darkcolor(forecast.List[3].Weathers[0].Main))
 		if err := ws2811.Render(); err != nil {
 			log.Println(err)
 		}
