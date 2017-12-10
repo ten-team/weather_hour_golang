@@ -175,10 +175,10 @@ func main() {
 	)
 	var sleep_time = time.Second * 30
 	led_matrix := [][]int{
-		{1, 2, 3, 4, 5, 6, 7},
-		{8, 9, 10, 11, 12, 13},
+		{20, 21, 22, 23, 24, 25},
 		{14, 15, 16, 17, 18, 19},
-		{20, 21, 22, 23, 24, 25}}
+		{8, 9, 10, 11, 12, 13},
+		{1, 2, 3, 4, 5, 6, 7}}
 
 	if err := ws2811.Init(GPIO_PIN, LED_COUNT, DEFAULT_BRIGHTNESS); err != nil {
 		log.Println(err)
